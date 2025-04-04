@@ -1,40 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Configuration ---
-FIRMWARE_PATH="./result"
-FLASH_TOOL="qmk" # Change to "dfu-util" or "hid_bootloader_cli" if needed
-EXTRA_FLAGS=""   # Add board-specific flags here if needed
+# --- Config ---
+FIRMWARE_FILE="./result/cantor_tbawor_theme.bin"
+FLASH_TOOL="dfu-util"
+EXTRA_FLAGS="-a 0 -s 0x08000000:leave"
 
-# --- Find firmware file ---
-FIRMWARE_FILE=$(find "$FIRMWARE_PATH" -type f \( -name '*.bin' -o -name '*.hex' \) -print -quit)
-
-if [[ -z "$FIRMWARE_FILE" ]]; then
-  echo "❌ No firmware (.hex or .bin) found in: $FIRMWARE_PATH"
+# --- Verify firmware exists ---
+if [[ ! -f "$FIRMWARE_FILE" ]]; then
+  echo "❌ Firmware file not found: $FIRMWARE_FILE"
+  echo "Did you run: nix build ?"
   exit 1
 fi
 
-echo "✅ Firmware found: $FIRMWARE_FILE"
-echo "⚠️ Please reset your keyboard into bootloader mode (press reset or unplug+plug with key held)..."
+echo "✅ Found firmware: $FIRMWARE_FILE"
+echo "⚠️  Please reset your keyboard into bootloader mode (press reset or boot key)..."
 sleep 5
 
-# --- Flash ---
+# --- Flash it ---
 echo "🚀 Flashing firmware using $FLASH_TOOL..."
 
-case "$FLASH_TOOL" in
-qmk)
-  qmk flash -f "$FIRMWARE_FILE" $EXTRA_FLAGS
-  ;;
-dfu-util)
-  dfu-util -D "$FIRMWARE_FILE" $EXTRA_FLAGS
-  ;;
-hid_bootloader_cli)
-  hid_bootloader_cli --mcu=atmega32u4 -w "$FIRMWARE_FILE" -v
-  ;;
-*)
-  echo "❌ Unknown flash tool: $FLASH_TOOL"
-  exit 1
-  ;;
-esac
-
-echo "✅ Flash complete!"
+if "$FLASH_TOOL" -D "$FIRMWARE_FILE" $EXTRA_FLAGS; then
+  echo "✅ Flash successful!"
+else
+  echo "⚠️ Flashing failed — trying with sudo..."
+  if sudo "$FLASH_TOOL" -D "$FIRMWARE_FILE" $EXTRA_FLAGS; then
+    echo "✅ Flash successful with sudo!"
+  else
+    echo "❌ Flash failed even with sudo. Check USB permissions or udev rules."
+    exit 1
+  fi
+fi
